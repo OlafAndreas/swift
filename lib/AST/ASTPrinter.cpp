@@ -2654,7 +2654,18 @@ bool ShouldPrintChecker::shouldPrint(const Decl *D,
     // print then skip printing it.
     SmallVector<InheritedEntry, 8> ProtocolsToPrint;
     getInheritedForPrinting(Ext, Options, ProtocolsToPrint);
-    if (ProtocolsToPrint.empty()) {
+    // An extension that applies a printed custom metadata attribute, or makes
+    // one unavailable for the extended type, is printed for the attribute.
+    bool HasCustomMetadataToPrint = false;
+    for (auto *attr : Ext->getAttrs().getAttributes<CustomAttr>()) {
+      auto *key = attr->getNominalDecl();
+      if (key && key->getAttrs().hasAttribute<CustomMetadataAttr>() &&
+          shouldPrint(key, Options)) {
+        HasCustomMetadataToPrint = true;
+        break;
+      }
+    }
+    if (ProtocolsToPrint.empty() && !HasCustomMetadataToPrint) {
       bool HasMemberToPrint = false;
       for (auto Member : Ext->getAllMembers()) {
         if (shouldPrint(Member, Options)) {

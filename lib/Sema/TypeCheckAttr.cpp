@@ -480,6 +480,8 @@ public:
   void visitFrozenAttr(FrozenAttr *attr);
 
   void visitCustomAttr(CustomAttr *attr);
+  void visitCustomMetadataAttr(CustomMetadataAttr *attr);
+  void checkCustomMetadataApplication(CustomAttr *attr, NominalTypeDecl *key);
   void visitPropertyWrapperAttr(PropertyWrapperAttr *attr);
   void visitResultBuilderAttr(ResultBuilderAttr *attr);
 
@@ -5155,6 +5157,13 @@ void AttributeChecker::visitCustomAttr(CustomAttr *attr) {
     return;
   }
 
+  // If the nominal type is a metadata attribute key, the attribute applies it
+  // to the declared or extended type.
+  if (nominal->getAttrs().hasAttribute<CustomMetadataAttr>()) {
+    checkCustomMetadataApplication(attr, nominal);
+    return;
+  }
+
   // If the nominal type is a global actor, let the global actor attribute
   // retrieval request perform checking for us.
   if (nominal->isGlobalActor()) {
@@ -5181,6 +5190,130 @@ void AttributeChecker::visitCustomAttr(CustomAttr *attr) {
   diagnose(attr->getLocation(), diag::nominal_type_not_attribute, nominal);
   nominal->diagnose(diag::decl_declared_here, nominal);
   attr->setInvalid();
+}
+
+void AttributeChecker::visitCustomMetadataAttr(CustomMetadataAttr *attr) {
+  auto *key = cast<NominalTypeDecl>(D);
+  if (Ctx.LangOpts.hasFeature(Feature::Embedded)) {
+    diagnose(attr->getLocation(), diag::custom_metadata_in_embedded_swift,
+             false, Identifier());
+    return;
+  }
+  if (key->getDeclContext()->isLocalContext()) {
+    diagnoseAndRemoveAttr(attr, diag::custom_metadata_key_local, key);
+    return;
+  }
+  if (key->isGenericContext()) {
+    diagnoseAndRemoveAttr(attr, diag::custom_metadata_key_generic, key);
+    return;
+  }
+}
+
+/// The first application of the metadata attribute \p key on \p decl in
+/// source order, if any.
+static CustomAttr *findCustomMetadataApplication(Decl *decl,
+                                                 NominalTypeDecl *key) {
+  auto &sourceMgr = decl->getASTContext().SourceMgr;
+  CustomAttr *first = nullptr;
+  for (auto *attr : decl->getAttrs().getAttributes<CustomAttr>()) {
+    if (attr->isInvalid() || attr->getNominalDecl() != key)
+      continue;
+    auto loc = attr->getLocation(),
+         firstLoc = first ? first->getLocation() : SourceLoc();
+    if (!first || (loc.isValid() && firstLoc.isValid() &&
+                   sourceMgr.findBufferContainingLoc(loc) ==
+                       sourceMgr.findBufferContainingLoc(firstLoc) &&
+                   sourceMgr.isBeforeInBuffer(loc, firstLoc)))
+      first = attr;
+  }
+  return first;
+}
+
+void AttributeChecker::checkCustomMetadataApplication(CustomAttr *attr,
+                                                      NominalTypeDecl *key) {
+  auto keyName = key->getName();
+
+  if (Ctx.LangOpts.hasFeature(Feature::Embedded)) {
+    diagnoseAndRemoveAttr(attr, diag::custom_metadata_in_embedded_swift, true,
+                          keyName);
+    return;
+  }
+
+  NominalTypeDecl *type = nullptr;
+  auto *ext = dyn_cast<ExtensionDecl>(D);
+  if (ext) {
+    type = ext->getExtendedNominal();
+  } else {
+    type = dyn_cast<NominalTypeDecl>(D);
+  }
+  if (!type || isa<ProtocolDecl>(type) || isa<BuiltinTupleDecl>(type)) {
+    diagnoseAndRemoveAttr(attr, diag::custom_metadata_not_on_type, keyName);
+    return;
+  }
+
+  if (attr->hasArgs()) {
+    diagnose(attr->getLocation(), diag::custom_metadata_arguments, keyName)
+        .highlight(attr->getRangeWithAt());
+    attr->setInvalid();
+    return;
+  }
+
+  if (type->hasClangNode()) {
+    diagnoseAndRemoveAttr(attr, diag::custom_metadata_imported_type, keyName,
+                          type);
+    return;
+  }
+  if (type->getDeclContext()->isLocalContext()) {
+    diagnoseAndRemoveAttr(attr, diag::custom_metadata_local_type, keyName,
+                          type);
+    return;
+  }
+  if (type->isGenericContext()) {
+    diagnoseAndRemoveAttr(attr, diag::custom_metadata_generic_type, keyName,
+                          type);
+    return;
+  }
+
+  // An unavailable extension forbids the key on the type rather than applying
+  // it.
+  if (ext && ext->isUnavailable())
+    return;
+
+  auto *typeModule = type->getModuleContext();
+  for (auto *other : type->getExtensions()) {
+    if (other->getModuleContext() != typeModule || !other->isUnavailable())
+      continue;
+    if (auto *forbidding = findCustomMetadataApplication(other, key)) {
+      diagnose(attr->getLocation(), diag::custom_metadata_forbidden, keyName,
+               type);
+      diagnose(forbidding->getLocation(), diag::custom_metadata_forbidden_here,
+               keyName, type);
+      attr->setInvalid();
+      return;
+    }
+  }
+
+  // Each type carries a key at most once per module: the first application in
+  // the type's declaration and then its extensions wins.
+  auto *module = D->getModuleContext();
+  CustomAttr *first = nullptr;
+  if (type->getModuleContext() == module)
+    first = findCustomMetadataApplication(type, key);
+  if (!first) {
+    for (auto *other : type->getExtensions()) {
+      if (other->getModuleContext() != module || other->isUnavailable())
+        continue;
+      if ((first = findCustomMetadataApplication(other, key)))
+        break;
+    }
+  }
+  if (first && first != attr) {
+    diagnose(attr->getLocation(), diag::custom_metadata_duplicate, keyName,
+             type);
+    diagnose(first->getLocation(), diag::custom_metadata_previous_application,
+             keyName);
+    attr->setInvalid();
+  }
 }
 
 static bool isMemberLessAccessibleThanType(NominalTypeDecl *typeDecl,

@@ -1657,6 +1657,7 @@ GeneratedModule IRGenRequest::evaluate(Evaluator &evaluator,
       IGM.emitTypeMetadataRecords(/*asContiguousArray*/ false);
       IGM.emitAccessibleFunctions();
       IGM.emitCustomSectionIndex();
+      IGM.emitCustomMetadataRecords();
       IGM.emitBuiltinReflectionMetadata();
       IGM.emitReflectionMetadataVersion();
       irgen.emitEagerClassInitialization();
@@ -1939,6 +1940,8 @@ static void performParallelIRGeneration(IRGenDescriptor desc) {
     irgen.emitAccessibleFunctions();
 
     irgen.emitCustomSectionIndex();
+
+    irgen.emitCustomMetadataRecords();
 
     irgen.emitReflectionMetadataVersion();
 

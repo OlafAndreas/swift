@@ -229,6 +229,19 @@ static bool usesFeatureTargetAttribute(Decl *decl) {
   return decl->getAttrs().hasAttribute<TargetAttr>();
 }
 
+static bool usesFeatureCustomMetadata(Decl *decl) {
+  if (decl->getAttrs().hasAttribute<CustomMetadataAttr>())
+    return true;
+  // Applications of keys that an interface cannot name are not printed.
+  for (auto *attr : decl->getAttrs().getAttributes<CustomAttr>()) {
+    if (auto *key = attr->getNominalDecl())
+      if (key->getAttrs().hasAttribute<CustomMetadataAttr>() &&
+          key->getFormalAccess() >= AccessLevel::Package)
+        return true;
+  }
+  return false;
+}
+
 static bool findLifetimeAttr(Decl *decl, bool findUnderscored) {
   auto hasLifetimeAttr = [&](Decl *decl) {
     if (!decl->getAttrs().hasAttribute<LifetimeAttr>()) {

@@ -456,6 +456,9 @@ public:
   /// Emit the SE-0492 custom section index for each IR module.
   void emitCustomSectionIndex();
 
+  /// Emit the custom metadata attribute records for each IR module.
+  void emitCustomMetadataRecords();
+
   /// Emit reflection metadata records for builtin and imported types referenced
   /// from this module.
   void emitBuiltinReflectionMetadata();
@@ -1338,6 +1341,13 @@ public:
   /// Swift.
   void emitCustomSectionIndex();
 
+  /// Record the applications of custom metadata attributes on a type or
+  /// extension this IR module emits.
+  void addCustomMetadataApplications(Decl *D);
+  /// Emit one record per custom metadata attribute application into the
+  /// runtime-owned attribute section. Not emitted in Embedded Swift.
+  void emitCustomMetadataRecords();
+
   llvm::Constant *getConstantSignedFunctionPointer(llvm::Constant *fn,
                                                    CanSILFunctionType fnType);
 
@@ -1497,6 +1507,16 @@ private:
   /// Names of the custom sections that `@section` placed variables into, in
   /// definition order. Consumed by emitCustomSectionIndex().
   SmallVector<std::string, 4> CustomSectionNames;
+
+  /// A custom metadata attribute applied to a type, directly or through one of
+  /// its extensions.
+  struct CustomMetadataApplication {
+    NominalTypeDecl *type;
+    NominalTypeDecl *key;
+    Decl *application;
+  };
+  /// Consumed by emitCustomMetadataRecords().
+  SmallVector<CustomMetadataApplication, 4> CustomMetadataApplications;
 
   /// Map of Objective-C protocols and protocol references, bitcast to i8*.
   /// The interesting global variables relating to an ObjC protocol.

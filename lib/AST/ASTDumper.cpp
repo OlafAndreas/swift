@@ -5139,6 +5139,7 @@ public:
   TRIVIAL_ATTR_PRINTER(Consuming, consuming)
   TRIVIAL_ATTR_PRINTER(Convenience, convenience)
   TRIVIAL_ATTR_PRINTER(Coroutine, coroutine)
+  TRIVIAL_ATTR_PRINTER(CustomMetadata, custom_metadata)
   TRIVIAL_ATTR_PRINTER(DiscardableResult, discardable_result)
   TRIVIAL_ATTR_PRINTER(DisfavoredOverload, disfavored_overload)
   TRIVIAL_ATTR_PRINTER(DistributedActor, distributed_actor)

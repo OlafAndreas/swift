@@ -1,6 +1,7 @@
 set(sources
   AssertionReporting.h
   CoreFoundationShims.h
+  CustomMetadataShims.h
   CustomSectionsShims.h
   EmbeddedShims.h
   FoundationShims.h

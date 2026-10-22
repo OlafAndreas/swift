@@ -953,7 +953,13 @@ SIMPLE_DECL_ATTR(yield_once, Coroutine,
   UserInaccessible | ABIBreakingToAdd | ABIBreakingToRemove | APIBreakingToAdd | APIBreakingToRemove | EquivalentInABIAttr,
   180)
 
-LAST_DECL_ATTR(Coroutine)
+SIMPLE_DECL_ATTR(customMetadata, CustomMetadata,
+  OnStruct | OnEnum,
+  ABIStableToAdd | ABIBreakingToRemove | APIStableToAdd | APIBreakingToRemove | UnreachableInABIAttr,
+  181)
+DECL_ATTR_FEATURE_REQUIREMENT(CustomMetadata, CustomMetadata)
+
+LAST_DECL_ATTR(CustomMetadata)
 
 #undef DECL_ATTR_ALIAS
 #undef CONTEXTUAL_DECL_ATTR_ALIAS

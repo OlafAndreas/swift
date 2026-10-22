@@ -1388,3 +1388,7 @@ Added: _$ss9ConstCellVMn
 // customSectionContents(named:) (SE-0492 section index and runtime access to custom sections)
 Added: _swift_enumerateCustomSections
 Added: _$ss21customSectionContents5namedSaySWGs12StaticStringV_tF
+
+// customMetadataTypes(marked:) (custom metadata attributes for types)
+Added: _swift_enumerateCustomMetadataTypes
+Added: _$ss19customMetadataTypes6markedSayypXpGxm_tlF

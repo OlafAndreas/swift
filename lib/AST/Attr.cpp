@@ -962,6 +962,15 @@ void DeclAttributes::print(ASTPrinter &Printer, const PrintOptions &Options,
         referencesSPIPlatform(DA, D))
       continue;
 
+    // Skip applications of custom metadata attributes whose key is not
+    // printed, such as an internal key in a public interface.
+    if (auto customAttr = dyn_cast<CustomAttr>(DA)) {
+      if (auto *key = customAttr->getNominalDecl())
+        if (key->getAttrs().hasAttribute<CustomMetadataAttr>() &&
+            !Options.shouldPrint(key))
+          continue;
+    }
+
     // If we're supposed to suppress expanded macros, check whether this is
     // a macro.
     if (Options.SuppressExpandedMacros) {

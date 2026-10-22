@@ -16,6 +16,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "swift/AST/ASTContext.h"
+#include "swift/AST/AvailabilityContext.h"
+#include "swift/AST/AvailabilityRange.h"
 #include "swift/AST/Decl.h"
 #include "swift/AST/DiagnosticEngine.h"
 #include "swift/AST/GenericEnvironment.h"
@@ -1349,6 +1351,11 @@ void IRGenerator::emitAccessibleFunctions() {
 void IRGenerator::emitCustomSectionIndex() {
   for (auto &m : *this)
     m.second->emitCustomSectionIndex();
+}
+
+void IRGenerator::emitCustomMetadataRecords() {
+  for (auto &m : *this)
+    m.second->emitCustomMetadataRecords();
 }
 
 static void
@@ -2725,6 +2732,8 @@ void IRGenModule::emitGlobalDecl(Decl *D) {
 
   D->visitAuxiliaryDecls([&](Decl *decl) { emitGlobalDecl(decl); },
                          /*visitFreestanding*/ true, /*visitExtensions*/ true);
+
+  addCustomMetadataApplications(D);
 
   switch (D->getKind()) {
   case DeclKind::Extension:
@@ -5137,6 +5146,98 @@ void IRGenModule::emitCustomSectionIndex() {
   }
 }
 
+void IRGenModule::addCustomMetadataApplications(Decl *D) {
+  if (Context.LangOpts.hasFeature(Feature::Embedded))
+    return;
+
+  NominalTypeDecl *type = nullptr;
+  if (auto *ext = dyn_cast<ExtensionDecl>(D))
+    type = ext->getExtendedNominal();
+  else if (isa<StructDecl>(D) || isa<EnumDecl>(D) || isa<ClassDecl>(D))
+    type = cast<NominalTypeDecl>(D);
+  if (!type || D->isUnavailable())
+    return;
+
+  for (auto *attr : D->getAttrs().getAttributes<CustomAttr>()) {
+    if (attr->isInvalid())
+      continue;
+    auto *key = attr->getNominalDecl();
+    if (!key || !key->getAttrs().hasAttribute<CustomMetadataAttr>())
+      continue;
+    CustomMetadataApplications.push_back({type, key, D});
+  }
+}
+
+/// The minimum OS version an application requires beyond the deployment
+/// target, packed as major << 16 | minor << 8 | patch, or 0 when it requires
+/// none.
+static uint32_t getCustomMetadataAvailability(ASTContext &ctx,
+                                              const NominalTypeDecl *type,
+                                              const Decl *application) {
+  auto deployment = AvailabilityRange::forDeploymentTarget(ctx);
+  llvm::VersionTuple required;
+  for (const Decl *decl : {static_cast<const Decl *>(type), application}) {
+    auto range = AvailabilityContext::forDeclSignature(decl).getPlatformRange();
+    if (deployment.isContainedIn(range) || !range.hasMinimumVersion())
+      continue;
+    required = std::max(required, range.getRawMinimumVersion());
+  }
+  if (required.empty())
+    return 0;
+  uint32_t major = std::min<uint32_t>(required.getMajor(), 0xFFFF);
+  uint32_t minor = std::min<uint32_t>(required.getMinor().value_or(0), 0xFF);
+  uint32_t patch = std::min<uint32_t>(required.getSubminor().value_or(0), 0xFF);
+  return major << 16 | minor << 8 | patch;
+}
+
+/// Emit one CustomMetadataRecord (see the runtime's CustomMetadata.cpp) per
+/// application.
+void IRGenModule::emitCustomMetadataRecords() {
+  if (CustomMetadataApplications.empty())
+    return;
+
+  StringRef sectionName;
+  switch (TargetInfo.OutputObjectFormat) {
+  case llvm::Triple::MachO:
+    sectionName = "__TEXT, __swift5_rattrs, regular";
+    break;
+  case llvm::Triple::ELF:
+  case llvm::Triple::Wasm:
+    sectionName = "swift5_runtime_attributes";
+    break;
+  case llvm::Triple::COFF:
+    sectionName = ".sw5ratt$B";
+    break;
+  case llvm::Triple::XCOFF:
+  case llvm::Triple::DXContainer:
+  case llvm::Triple::GOFF:
+  case llvm::Triple::SPIRV:
+  case llvm::Triple::UnknownObjectFormat:
+    return;
+  }
+
+  for (const auto &app : CustomMetadataApplications) {
+    ConstantInitBuilder builder(*this);
+    auto fields = builder.beginStruct();
+    fields.addRelativeAddress(getAddrOfLLVMVariableOrGOTEquivalent(
+        LinkEntity::forNominalTypeDescriptor(app.type)));
+    fields.addRelativeAddress(getAddrOfLLVMVariableOrGOTEquivalent(
+        LinkEntity::forNominalTypeDescriptor(app.key)));
+    // value: reserved for attribute arguments.
+    fields.addInt32(0);
+    // flags: none defined.
+    fields.addInt32(0);
+    fields.addInt32(
+        getCustomMetadataAvailability(Context, app.type, app.application));
+    auto *var = fields.finishAndCreateGlobal("\x01l_custom_metadata_record",
+                                             Alignment(4), /*constant*/ true,
+                                             llvm::GlobalValue::PrivateLinkage);
+    var->setSection(sectionName);
+    disableAddressSanitizer(*this, var);
+    addUsedGlobal(var);
+  }
+}
+
 /// Fetch a global reference to a reference to the given Objective-C class.
 /// The result is of type ObjCClassPtrTy->getPointerTo().
 Address IRGenModule::getAddrOfObjCClassRef(ClassDecl *theClass) {
@@ -6255,12 +6356,15 @@ void IRGenModule::emitNestedTypeDecls(DeclRange members) {
       continue;
 
     case DeclKind::Enum:
+      addCustomMetadataApplications(member);
       emitEnumDecl(cast<EnumDecl>(member));
       continue;
     case DeclKind::Struct:
+      addCustomMetadataApplications(member);
       emitStructDecl(cast<StructDecl>(member));
       continue;
     case DeclKind::Class:
+      addCustomMetadataApplications(member);
       emitClassDecl(cast<ClassDecl>(member));
       continue;
     case DeclKind::Protocol:

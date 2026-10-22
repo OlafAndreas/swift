@@ -81,6 +81,7 @@ set(swift_runtime_sources
     ThreadingError.cpp
     Tracing.cpp
     AccessibleFunction.cpp
+    CustomMetadata.cpp
     WindowsUnicode.cpp)
 
 # We pull this in separately here because other dylibs will need it, but only

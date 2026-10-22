@@ -57,6 +57,7 @@ add_library(swiftRuntimeCore OBJECT
     ThreadingError.cpp
     Tracing.cpp
     AccessibleFunction.cpp
+    CustomMetadata.cpp
     WindowsUnicode.cpp)
 
 if(SwiftCore_ENABLE_RUNTIME_LEAK_CHECKER)

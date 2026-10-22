@@ -1895,6 +1895,37 @@ ERROR(attribute_requires_experimental_feature,none,
 ERROR(nominal_type_not_attribute,none,
       "%kind0 cannot be used as an attribute", (const ValueDecl *))
 
+ERROR(custom_metadata_key_generic,none,
+      "'@customMetadata' cannot be applied to %kind0, which is generic or "
+      "nested in a generic type", (const ValueDecl *))
+ERROR(custom_metadata_key_local,none,
+      "'@customMetadata' cannot be applied to local %kind0",
+      (const ValueDecl *))
+ERROR(custom_metadata_not_on_type,none,
+      "metadata attribute %0 can only be applied to a struct, enum, class or "
+      "actor, or to an extension of one", (Identifier))
+ERROR(custom_metadata_arguments,none,
+      "metadata attribute %0 takes no arguments", (Identifier))
+ERROR(custom_metadata_generic_type,none,
+      "metadata attribute %0 cannot be applied to %kind1, which is generic or "
+      "nested in a generic type", (Identifier, const ValueDecl *))
+ERROR(custom_metadata_local_type,none,
+      "metadata attribute %0 cannot be applied to local %kind1",
+      (Identifier, const ValueDecl *))
+ERROR(custom_metadata_imported_type,none,
+      "metadata attribute %0 cannot be applied to imported %kind1",
+      (Identifier, const ValueDecl *))
+ERROR(custom_metadata_duplicate,none,
+      "metadata attribute %0 is already applied to %kind1 in this module",
+      (Identifier, const ValueDecl *))
+NOTE(custom_metadata_previous_application,none,
+     "%0 is applied here", (Identifier))
+ERROR(custom_metadata_forbidden,none,
+      "metadata attribute %0 cannot be applied to %kind1; its module makes it "
+      "unavailable", (Identifier, const ValueDecl *))
+NOTE(custom_metadata_forbidden_here,none,
+     "%0 is made unavailable for %kind1 here", (Identifier, const ValueDecl *))
+
 ERROR(attribute_part_of_type,none,
       "attribute %0 cannot be applied to a type alias", (const TypeAttribute *))
 NOTE(add_attribute_to_alias_def,none,
@@ -9518,6 +9549,10 @@ GROUPED_ERROR(export_interface_on_generic_in_embedded_swift,
               "'@export(interface)' cannot be applied to a "
               "%kind0 in Embedded Swift",
               (const Decl *))
+GROUPED_ERROR(custom_metadata_in_embedded_swift, EmbeddedRestrictions, none,
+              "%select{'@customMetadata'|metadata attribute %1}0 is not "
+              "supported in Embedded Swift",
+              (bool, Identifier))
 
 //===----------------------------------------------------------------------===//
 // MARK: @abi Attribute

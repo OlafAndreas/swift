@@ -257,6 +257,7 @@ extension ASTGenVisitor {
         .CompilerInitialized,
         .ConstVal,
         .ConstInitialized,
+        .CustomMetadata,
         .DynamicCallable,
         .EagerMove,
         .Exported,
